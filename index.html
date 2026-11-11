@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Teacher</title>
+<meta name="description" content="AI Teacher – ein KI-Tutor für Softwareentwicklung. Diplomarbeit an der HTL Wien West.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2313294B'/%3E%3Cg fill='%23F07A1A'%3E%3Crect x='6' y='13' width='3' height='6' rx='1.5'/%3E%3Crect x='11' y='9' width='3' height='14' rx='1.5'/%3E%3Crect x='16' y='6' width='3' height='20' rx='1.5'/%3E%3Crect x='21' y='11' width='3' height='10' rx='1.5'/%3E%3C/g%3E%3C/svg%3E">
+
+<!--
+  ============================================================
+  AI Teacher – Website fuer den Tag der offenen Tuer
+
+  Wird vom Cloud-Backend ausgeliefert: http://localhost:8001
+  Die Live-Demo spricht mit demselben Backend ueber die Routen aus
+  docs/API-Absprache_AI-Teacher.md (/health, /chat/stream).
+
+  Notfall-Modus: Ist das Backend oder Google nicht erreichbar, antwortet
+  die Seite mit vorbereiteten Antworten (ganz unten im Script) und sagt
+  das deutlich dazu. Die Demo bleibt so nie haengen.
+
+  Alles liegt lokal (auch die Schrift) - die Seite braucht selbst kein
+  Internet. Nur die echten Antworten von Gemini brauchen es.
+
+  Online-Vorschau: Dieselbe Datei liegt auch auf GitHub Pages. Dort gibt
+  es kein Backend (der API-Key darf nicht ins Internet), deshalb antwortet
+  sie dort immer mit den vorbereiteten Antworten und sagt das dazu.
+  ============================================================
+-->
+
+<style>
+  @font-face { font-family: "Inter"; src: url("fonts/Inter-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Inter"; src: url("fonts/Inter-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+  @font-face { font-family: "Inter"; src: url("fonts/Inter-SemiBold.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+  @font-face { font-family: "Inter"; src: url("fonts/Inter-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+  @font-face { font-family: "Inter Display"; src: url("fonts/InterDisplay-ExtraBold.woff2") format("woff2"); font-weight: 800; font-display: swap; }
+
+  :root {
+    --navy: #13294B;
+    --navy-2: #1B3762;
+    --navy-3: #24477A;
+    --blue: #1F73C9;
+    --orange: #F07A1A;
+    --orange-d: #C9580C;
+    --yellow: #F6C343;
+    --sky: #A9CBEA;
+    --sky-t: #E8F1FB;
+    --orange-t: #FDF0E4;
+    --bg: #F4F6F9;
+    --surface: #FFFFFF;
+    --sunken: #EEF1F5;
+    --ink: #151A22;
+    --soft: #4F5A69;
+    --faint: #8691A0;
+    --rule: #DCE2EA;
+    --ok: #1B8A5A;
+    --warn: #B26B00;
+    --shadow: 0 1px 2px rgba(19,41,75,.06), 0 8px 24px rgba(19,41,75,.08);
+    --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --display: "Inter Display", "Inter", system-ui, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace;
+    --wrap: 1180px;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 82px; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 24px; }
+  h1, h2, h3 { margin: 0; text-wrap: balance; }
+  p { margin: 0; text-wrap: pretty; }
+  button { font: inherit; cursor: pointer; }
+
+  /* ---------------- Navigation ---------------- */
+  .nav {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(19,41,75,.94);
+    backdrop-filter: blur(8px);
+    color: #fff;
+  }
+  .nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: #fff; text-decoration: none; }
+  .logo b { color: var(--orange); }
+  .nav-links { display: flex; gap: 22px; margin-left: auto; }
+  .nav-links a { color: #C9D6E8; text-decoration: none; font-size: 15px; font-weight: 500; }
+  .nav-links a:hover { color: #fff; }
+  .status {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 999px;
+    font-size: 13px; font-weight: 600;
+    background: rgba(255,255,255,.1); color: #fff; white-space: nowrap;
+  }
+  .status .punkt { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); }
+  .status.live .punkt { background: #3DD68C; box-shadow: 0 0 0 4px rgba(61,214,140,.2); }
+  .status.offline .punkt { background: var(--yellow); }
+
+  /* ---------------- Hero ---------------- */
+  .hero { position: relative; overflow: hidden; background: var(--navy); color: #fff; }
+  .hero svg.wellen { position: absolute; right: -220px; top: -120px; width: 900px; height: 900px; pointer-events: none; }
+  .hero .wrap { position: relative; display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: center; padding-top: 72px; padding-bottom: 80px; }
+  .eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--sky); }
+  .hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(56px, 8vw, 104px); line-height: .95; letter-spacing: -.035em; margin: 18px 0 22px; }
+  .hero h1 span { color: var(--orange); }
+  .hero .lead { font-size: 21px; line-height: 1.5; color: #D5E1F0; max-width: 34ch; }
+  .knoepfe { display: flex; gap: 12px; margin-top: 32px; flex-wrap: wrap; }
+  .knopf {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 14px 22px; border-radius: 12px; border: 0;
+    font-weight: 600; font-size: 16px; text-decoration: none;
+  }
+  .knopf.primaer { background: var(--orange); color: #fff; }
+  .knopf.primaer:hover { background: var(--orange-d); }
+  .knopf.sekundaer { background: rgba(255,255,255,.1); color: #fff; }
+  .knopf.sekundaer:hover { background: rgba(255,255,255,.18); }
+
+  .gespraech { display: flex; flex-direction: column; gap: 18px; }
+  .blase-demo { padding: 18px 22px; border-radius: 22px; font-weight: 600; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+  .blase-demo.frage { align-self: flex-start; background: #fff; color: var(--navy); font-size: 20px; border-bottom-left-radius: 6px; }
+  .blase-demo.antwort { align-self: flex-end; background: var(--orange); color: var(--navy); font-size: 18px; line-height: 1.45; max-width: 440px; border-bottom-right-radius: 6px; }
+  .welle { display: flex; align-items: center; gap: 3px; height: 26px; margin-bottom: 10px; }
+  .welle i { display: block; width: 3px; border-radius: 2px; background: var(--navy); animation: welle 1.2s ease-in-out infinite; }
+  .welle small { margin-left: 10px; font-size: 11px; font-weight: 700; letter-spacing: .14em; }
+  @keyframes welle { 0%,100% { transform: scaleY(.45); } 50% { transform: scaleY(1); } }
+
+  .merkmale { background: var(--navy-2); color: #fff; }
+  .merkmale .wrap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding-top: 28px; padding-bottom: 28px; }
+  .merkmal { display: flex; gap: 16px; align-items: center; }
+  .merkmal .ico { flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; }
+  .merkmal b { display: block; font-size: 17px; }
+  .merkmal span { color: #B9C9DE; font-size: 15px; }
+
+  /* ---------------- Abschnitte ---------------- */
+  section.block { padding: 88px 0; }
+  .kopf { max-width: 760px; margin-bottom: 40px; }
+  .kopf .eyebrow { color: var(--orange-d); }
+  .kopf h2 { font-family: var(--display); font-weight: 800; font-size: clamp(34px, 4.4vw, 50px); letter-spacing: -.025em; line-height: 1.05; margin: 10px 0 14px; color: var(--navy); }
+  .kopf p { font-size: 19px; color: var(--soft); }
+  .kopf p.vorschau-hinweis { margin-top: 16px; padding: 14px 18px; border-radius: 14px; background: var(--orange-t); color: var(--ink); font-size: 16px; border-left: 4px solid var(--orange); }
+
+  /* ---------------- Demo ---------------- */
+  .demo-raster { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+  .chat {
+    background: var(--surface); border-radius: 20px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; height: min(760px, calc(100vh - 100px)); min-height: 500px;
+  }
+  .chat-kopf { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--rule); }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--orange); display: grid; place-items: center; flex: none; }
+  .chat-kopf b { display: block; font-size: 16px; }
+  .chat-kopf small { color: var(--faint); font-size: 13px; }
+  .chat-kopf .rechts { margin-left: auto; display: flex; gap: 8px; }
+  .klein-knopf { border: 1px solid var(--rule); background: var(--surface); color: var(--soft); border-radius: 10px; padding: 8px 12px; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+  .klein-knopf:hover { border-color: var(--faint); color: var(--ink); }
+  .klein-knopf[aria-pressed="false"] { opacity: .55; }
+  .klein-knopf.stopp { border-color: #E5484D; color: #C2272D; background: #FFF1F1; }
+  .klein-knopf.stopp:hover { background: #FFE2E2; color: #A11A20; }
+
+  .verlauf { flex: 1; overflow-y: auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 18px; }
+  .leer { margin: auto; text-align: center; max-width: 460px; color: var(--soft); }
+  .leer h3 { font-size: 22px; color: var(--navy); margin-bottom: 8px; }
+  .nachricht { max-width: 82%; padding: 14px 18px; border-radius: 18px; font-size: 18px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .nachricht.user { align-self: flex-end; background: var(--blue); color: #fff; border-bottom-right-radius: 6px; }
+  .nachricht.ki { align-self: flex-start; background: var(--sunken); border-bottom-left-radius: 6px; }
+  .nachricht.ki .tippt { display: inline-flex; gap: 5px; }
+  .nachricht.ki .tippt i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); animation: tippt 1s infinite; }
+  .nachricht.ki .tippt i:nth-child(2) { animation-delay: .15s; } .nachricht.ki .tippt i:nth-child(3) { animation-delay: .3s; }
+  @keyframes tippt { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+  .code-block { display: block; margin: 10px 0; background: var(--navy); color: #E8EEF7; border-radius: 12px; padding: 30px 16px 14px; font-family: var(--mono); font-size: 15px; line-height: 1.5; white-space: pre; overflow-x: auto; position: relative; }
+  .code-block::before { content: "Code · wird angezeigt, nicht vorgelesen"; position: absolute; top: 8px; left: 16px; font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--sky); }
+  .quellen { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; white-space: normal; }
+  .quelle { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--rule); font-size: 13px; color: var(--soft); }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 10px; font-size: 13px; color: var(--faint); white-space: normal; }
+  .meta .offline-hinweis { color: var(--warn); font-weight: 600; }
+  .meta button { border: 0; background: none; color: var(--blue); font-size: 13px; font-weight: 600; padding: 0; }
+  .fehler-text { color: #B42318; font-weight: 500; }
+
+  .vorschlaege { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 20px 12px; }
+  .vorschlag { border: 1px solid var(--rule); background: var(--surface); border-radius: 999px; padding: 8px 14px; font-size: 15px; color: var(--navy); }
+  .vorschlag:hover { border-color: var(--blue); color: var(--blue); }
+
+  .eingabe { display: flex; gap: 10px; align-items: flex-end; padding: 14px 16px 16px; border-top: 1px solid var(--rule); }
+  .eingabe textarea { flex: 1; resize: none; border: 1px solid var(--rule); border-radius: 14px; padding: 13px 16px; font: inherit; font-size: 17px; line-height: 1.4; max-height: 140px; outline: none; background: var(--bg); }
+  .eingabe textarea:focus { border-color: var(--blue); background: #fff; }
+  .rund { flex: none; width: 50px; height: 50px; border-radius: 50%; border: 0; display: grid; place-items: center; }
+  .rund.mikro { background: var(--sunken); color: var(--navy); }
+  .rund.mikro.hoert { background: #E5484D; color: #fff; animation: puls 1.2s infinite; }
+  @keyframes puls { 0% { box-shadow: 0 0 0 0 rgba(229,72,77,.45); } 100% { box-shadow: 0 0 0 16px rgba(229,72,77,0); } }
+  .rund.senden { background: var(--orange); color: #fff; }
+  .rund.senden:disabled { background: var(--rule); cursor: default; }
+
+  .seite { display: flex; flex-direction: column; gap: 16px; }
+  .karte { background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); padding: 22px; }
+  .karte h3 { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin-bottom: 16px; }
+  .schritte { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .schritt { display: grid; grid-template-columns: 36px 1fr; gap: 12px; padding: 10px 8px; border-radius: 12px; transition: background .25s; }
+  .schritt .nr { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--sunken); color: var(--faint); font-weight: 700; font-size: 15px; transition: all .25s; }
+  .schritt b { display: block; font-size: 15px; color: var(--soft); }
+  .schritt span { display: block; font-size: 13px; color: var(--faint); min-height: 1.2em; }
+  .schritt.aktiv { background: var(--sky-t); }
+  .schritt.aktiv .nr { background: var(--blue); color: #fff; animation: puls-blau 1.2s infinite; }
+  .schritt.aktiv b { color: var(--navy); }
+  .schritt.fertig .nr { background: var(--ok); color: #fff; }
+  .schritt.fertig b { color: var(--ink); }
+  .schritt.uebersprungen .nr { background: var(--yellow); color: var(--navy); }
+  @keyframes puls-blau { 0% { box-shadow: 0 0 0 0 rgba(31,115,201,.4); } 100% { box-shadow: 0 0 0 12px rgba(31,115,201,0); } }
+
+  .einstellung { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; font-size: 15px; }
+  .einstellung + .einstellung { border-top: 1px solid var(--rule); }
+  .einstellung select { font: inherit; font-size: 15px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--rule); background: var(--bg); }
+  .schalter { position: relative; width: 46px; height: 26px; border-radius: 999px; border: 0; background: var(--rule); transition: background .2s; }
+  .schalter::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+  .schalter[aria-checked="true"] { background: var(--ok); }
+  .schalter[aria-checked="true"]::after { transform: translateX(20px); }
+
+  /* ---------------- Ablauf ---------------- */
+  .ablauf { display: grid; grid-template-columns: 1.15fr .85fr; gap: 40px; align-items: center; }
+  .skizze { background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); padding: 18px; }
+  .skizze svg { width: 100%; height: auto; display: block; font-family: var(--sans); }
+  .liste { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  .liste li { counter-increment: s; position: relative; padding: 0 0 22px 56px; }
+  .liste li::before { content: counter(s); position: absolute; left: 0; top: -2px; width: 38px; height: 38px; border-radius: 50%; background: var(--navy); color: #fff; display: grid; place-items: center; font-weight: 700; }
+  .liste b { display: block; font-size: 18px; color: var(--navy); margin-bottom: 2px; }
+  .liste span { color: var(--soft); }
+
+  /* ---------------- Vergleich ---------------- */
+  .vergleich { background: var(--navy); color: #fff; }
+  .vergleich .kopf h2 { color: #fff; }
+  .vergleich .kopf .eyebrow { color: var(--orange); }
+  .vergleich .kopf p { color: #C9D6E8; }
+  .seiten { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+  .seiten .karte { color: var(--ink); display: flex; gap: 18px; align-items: center; }
+  .seiten .karte .ico { flex: none; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; }
+  .seiten .karte b { display: block; font-size: 22px; color: var(--navy); }
+  .seiten .karte span { color: var(--soft); font-size: 15px; }
+  .kriterien { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .kriterium { background: var(--navy-2); border-radius: 18px; padding: 22px; }
+  .kriterium .art { font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--orange); }
+  .kriterium b { display: block; font-size: 20px; margin: 6px 0 8px; }
+  .kriterium p { color: #C9D6E8; font-size: 15px; }
+  .fair { margin-top: 24px; padding: 18px 22px; border-radius: 16px; background: rgba(255,255,255,.06); color: #D5E1F0; font-size: 16px; }
+  .fair b { color: #fff; }
+
+  /* ---------------- Team ---------------- */
+  .team { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .person { background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); padding: 26px; border-top: 5px solid var(--blue); }
+  .person:nth-child(2) { border-top-color: var(--orange); }
+  .person:nth-child(3) { border-top-color: var(--yellow); }
+  .person .initialen { width: 56px; height: 56px; border-radius: 50%; background: var(--sunken); display: grid; place-items: center; font-weight: 700; font-size: 20px; color: var(--navy); margin-bottom: 16px; }
+  .person b { display: block; font-size: 21px; color: var(--navy); }
+  .person .rolle { display: block; color: var(--orange-d); font-weight: 600; font-size: 15px; margin: 2px 0 12px; }
+  .person p { color: var(--soft); font-size: 15px; }
+  .betreuer { margin-top: 24px; color: var(--soft); }
+
+  footer { background: var(--navy); color: #A9BBD3; padding: 32px 0; font-size: 14px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+
+  /* ---------------- Schmal ---------------- */
+  @media (max-width: 980px) {
+    .hero .wrap, .ablauf, .demo-raster { grid-template-columns: minmax(0, 1fr); }
+    .gespraech { display: none; }
+    .kriterien { grid-template-columns: 1fr 1fr; }
+    .nav-links { display: none; }
+    .status { margin-left: auto; }
+  }
+  @media (max-width: 640px) {
+    .merkmale .wrap, .team, .seiten, .kriterien { grid-template-columns: 1fr; }
+    .nachricht { max-width: 92%; font-size: 17px; }
+    section.block { padding: 64px 0; }
+    .wrap { padding: 0 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } html { scroll-behavior: auto; } }
+</style>
+</head>
+
+<body>
+
+<!-- Wiederverwendete Symbole -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-welle" viewBox="0 0 24 24"><g fill="currentColor"><rect x="2" y="9" width="3" height="6" rx="1.5"/><rect x="7" y="5" width="3" height="14" rx="1.5"/><rect x="12" y="2" width="3" height="20" rx="1.5"/><rect x="17" y="7" width="3" height="10" rx="1.5"/></g></symbol>
+  <symbol id="i-mikro" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor" stroke="none"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></g></symbol>
+  <symbol id="i-senden" viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2.5-6.5L4 12z" fill="currentColor"/></symbol>
+  <symbol id="i-buch" viewBox="0 0 24 24"><path d="M3 5c3-1.3 6-1.3 8.5.4V20c-2.5-1.7-5.5-1.7-8.5-.4V5zm18 0c-3-1.3-6-1.3-8.5.4V20c2.5-1.7 5.5-1.7 8.5-.4V5z" fill="currentColor"/></symbol>
+  <symbol id="i-lautsprecher" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></g></symbol>
+  <symbol id="i-wolke" viewBox="0 0 24 24"><path d="M7 19a5 5 0 0 1-.6-10A6 6 0 0 1 18 8.5 4.5 4.5 0 0 1 17.5 19H7z" fill="currentColor"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><g fill="currentColor"><rect x="3" y="3" width="18" height="5" rx="1.5"/><rect x="3" y="9.5" width="18" height="5" rx="1.5"/><rect x="3" y="16" width="18" height="5" rx="1.5"/></g></symbol>
+  <symbol id="i-neu" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+</svg>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="logo" href="#start"><svg width="28" height="28" style="color:var(--orange)"><use href="#i-welle"/></svg><span><b>AI</b> Teacher</span></a>
+    <div class="nav-links">
+      <a href="#chat">Ausprobieren</a>
+      <a href="#ablauf">So funktioniert's</a>
+      <a href="#vergleich">Lokal oder Cloud</a>
+      <a href="#team">Team</a>
+    </div>
+    <span class="status" id="status" title="Verbindung zum Sprachmodell"><span class="punkt"></span><span id="status-text">verbinde …</span></span>
+  </div>
+</nav>
+
+<!-- ============ Hero ============ -->
+<header class="hero" id="start">
+  <svg class="wellen" viewBox="0 0 900 900" aria-hidden="true">
+    <g fill="none" stroke="#2A4F86" stroke-linecap="round">
+      <circle cx="450" cy="450" r="140" stroke-width="2" opacity=".9"/>
+      <circle cx="450" cy="450" r="210" stroke-width="3" opacity=".7"/>
+      <circle cx="450" cy="450" r="280" stroke-width="2" opacity=".55"/>
+      <circle cx="450" cy="450" r="350" stroke-width="3" opacity=".4"/>
+      <circle cx="450" cy="450" r="420" stroke-width="2" opacity=".28"/>
+    </g>
+  </svg>
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">Diplomarbeit 2026/27 · HTL Wien West</div>
+      <h1><span>AI</span> Teacher</h1>
+      <p class="lead">Dein KI-Tutor für Softwareentwicklung. Er antwortet rund um die Uhr, stützt sich auf die Unterlagen aus dem eigenen Unterricht und liest seine Antworten vor.</p>
+      <div class="knoepfe">
+        <a class="knopf primaer" href="#chat">Jetzt ausprobieren
+          <svg width="18" height="18"><use href="#i-senden"/></svg></a>
+        <a class="knopf sekundaer" href="#ablauf">So funktioniert's</a>
+      </div>
+    </div>
+    <div class="gespraech" aria-hidden="true">
+      <div class="blase-demo frage">Was ist eigentlich Vererbung?</div>
+      <div class="blase-demo antwort">
+        <div class="welle"><i style="height:9px"></i><i style="height:17px;animation-delay:.1s"></i><i style="height:24px;animation-delay:.2s"></i><i style="height:14px;animation-delay:.3s"></i><i style="height:20px;animation-delay:.4s"></i><i style="height:11px;animation-delay:.5s"></i><i style="height:22px;animation-delay:.6s"></i><i style="height:13px;animation-delay:.7s"></i><small>AI TEACHER</small></div>
+        Stell dir eine Klasse „Tier“ vor. Ein Hund erbt alles, was ein Tier kann – und kann zusätzlich bellen.
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="merkmale">
+  <div class="wrap">
+    <div class="merkmal"><span class="ico" style="background:var(--blue)"><svg width="26" height="26" style="color:#fff"><use href="#i-mikro"/></svg></span><div><b>Fragen stellen</b><span>per Text oder per Sprache</span></div></div>
+    <div class="merkmal"><span class="ico" style="background:var(--orange)"><svg width="26" height="26" style="color:#fff"><use href="#i-buch"/></svg></span><div><b>Aus dem Unterricht</b><span>Antworten auf Basis der SEW-Unterlagen</span></div></div>
+    <div class="merkmal"><span class="ico" style="background:var(--yellow)"><svg width="26" height="26" style="color:var(--navy)"><use href="#i-lautsprecher"/></svg></span><div><b>Vorgelesen</b><span>Code wird angezeigt, aber nicht vorgelesen</span></div></div>
+  </div>
+</div>
+
+<!-- ============ Demo ============ -->
+<section class="block" id="demo">
+  <div class="wrap">
+    <div class="kopf">
+      <div class="eyebrow" id="demo-eyebrow">Live-Demo</div>
+      <h2>Frag den AI Teacher</h2>
+      <p>Stell eine Frage zu Softwareentwicklung – tippen oder auf das Mikrofon tippen und sprechen. Rechts siehst du, was im Hintergrund gerade passiert.</p>
+      <p class="vorschau-hinweis" id="vorschau-hinweis" hidden><b>Online-Vorschau:</b> Hier antwortet der AI Teacher mit vorbereiteten Beispielen zu Schleifen, Vererbung, Konstruktoren, Interfaces, Variablen und Verzweigungen. Die echte KI mit Gemini und den Unterrichtsunterlagen zeigen wir live am Projektstand.</p>
+    </div>
+
+    <div class="demo-raster" id="chat">
+      <div class="chat">
+        <div class="chat-kopf">
+          <span class="avatar"><svg width="22" height="22" style="color:#fff"><use href="#i-welle"/></svg></span>
+          <div><b>AI Teacher</b><small id="modell-name">Tutor für Softwareentwicklung</small></div>
+          <div class="rechts">
+            <button class="klein-knopf stopp" id="stopp" type="button" title="Vorlesen stoppen (Esc)" hidden><svg width="14" height="14"><rect x="3" y="3" width="8" height="8" rx="1.5" fill="currentColor"/></svg>Vorlesen stoppen</button>
+            <button class="klein-knopf" id="neu" type="button" title="Neues Gespräch"><svg width="14" height="14"><use href="#i-neu"/></svg>Neu</button>
+          </div>
+        </div>
+
+        <div class="verlauf" id="verlauf" aria-live="polite">
+          <div class="leer" id="leer">
+            <h3>Was willst du wissen?</h3>
+            <p>Zum Beispiel, wie eine Schleife funktioniert oder was Vererbung ist. Probier auch eine Rückfrage – der Tutor merkt sich das Gespräch.</p>
+          </div>
+        </div>
+
+        <div class="vorschlaege" id="vorschlaege"></div>
+
+        <form class="eingabe" id="formular">
+          <button class="rund mikro" id="mikro" type="button" title="Frage sprechen" hidden><svg width="22" height="22"><use href="#i-mikro"/></svg></button>
+          <textarea id="frage" rows="1" maxlength="2000" placeholder="Deine Frage …" aria-label="Deine Frage"></textarea>
+          <button class="rund senden" id="senden" type="submit" title="Senden" disabled><svg width="22" height="22"><use href="#i-senden"/></svg></button>
+        </form>
+      </div>
+
+      <aside class="seite">
+        <div class="karte">
+          <h3>Was gerade passiert</h3>
+          <ol class="schritte" id="schritte">
+            <li class="schritt" data-s="1"><span class="nr">1</span><div><b>Frage empfangen</b><span></span></div></li>
+            <li class="schritt" data-s="2"><span class="nr">2</span><div><b>Unterlagen durchsuchen</b><span></span></div></li>
+            <li class="schritt" data-s="3"><span class="nr">3</span><div><b>Sprachmodell schreibt</b><span></span></div></li>
+            <li class="schritt" data-s="4"><span class="nr">4</span><div><b>Antwort vorlesen</b><span></span></div></li>
+          </ol>
+        </div>
+        <div class="karte">
+          <h3>Einstellungen</h3>
+          <div class="einstellung">
+            <label for="jahrgang">Jahrgang</label>
+            <select id="jahrgang">
+              <option value="0">alle</option>
+              <option value="1">1. Jahrgang</option>
+              <option value="2">2. Jahrgang</option>
+              <option value="3">3. Jahrgang</option>
+            </select>
+          </div>
+          <div class="einstellung">
+            <span id="vorlesen-label">Antworten vorlesen</span>
+            <button class="schalter" id="vorlesen" type="button" role="switch" aria-checked="true" aria-labelledby="vorlesen-label"></button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Ablauf ============ -->
+<section class="block" id="ablauf" style="background:var(--surface)">
+  <div class="wrap">
+    <div class="kopf">
+      <div class="eyebrow">So funktioniert's</div>
+      <h2>Vom Unterricht in die Antwort</h2>
+      <p>Drei Teile arbeiten zusammen: die App, ein Backend mit dem Sprachmodell und der MCP-Server mit den Unterrichtsunterlagen.</p>
+    </div>
+    <div class="ablauf">
+      <div class="skizze">
+        <svg viewBox="0 0 640 520" role="img" aria-label="Aufbau: App, Anmeldung, zwei Backends, Sprachmodelle und MCP-Server">
+          <defs>
+            <marker id="pfeil" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8691A0"/></marker>
+          </defs>
+          <g stroke="#8691A0" stroke-width="2" fill="none" marker-end="url(#pfeil)" marker-start="url(#pfeil)">
+            <path d="M320 112 V140 H160 V170"/>
+            <path d="M320 140 H480 V170"/>
+            <path d="M110 250 V318"/>
+            <path d="M530 250 V318"/>
+            <path d="M210 250 V280 H290 V318"/>
+            <path d="M430 250 V280 H350 V318"/>
+          </g>
+          <g stroke="#C9D2DE" stroke-width="2" fill="none" stroke-dasharray="5 5"><path d="M420 64 H468"/></g>
+          <!-- App -->
+          <rect x="180" y="24" width="280" height="88" rx="16" fill="#13294B"/>
+          <text x="200" y="56" fill="#A9CBEA" font-size="12" font-weight="700" letter-spacing="1.5">DAVUD BOZKURT</text>
+          <text x="200" y="82" fill="#fff" font-size="21" font-weight="700">App (PWA)</text>
+          <text x="200" y="102" fill="#C9D6E8" font-size="13">Chat, Mikrofon, Sprachausgabe</text>
+          <!-- OAuth -->
+          <rect x="470" y="30" width="150" height="70" rx="14" fill="#FDF0E4" stroke="#F07A1A" stroke-dasharray="5 4"/>
+          <text x="484" y="54" fill="#C9580C" font-size="11" font-weight="700" letter-spacing="1.2">GEPLANT</text>
+          <text x="484" y="74" fill="#151A22" font-size="15" font-weight="700">Anmeldung</text>
+          <text x="484" y="91" fill="#4F5A69" font-size="12">Google / Microsoft (OAuth)</text>
+          <!-- Backends -->
+          <rect x="40" y="170" width="240" height="80" rx="16" fill="#E8F1FB" stroke="#1F73C9" stroke-width="2"/>
+          <text x="60" y="198" fill="#1F73C9" font-size="12" font-weight="700" letter-spacing="1.5">DENYS SKRYNNIK</text>
+          <text x="60" y="222" fill="#151A22" font-size="19" font-weight="700">Cloud-Backend</text>
+          <text x="60" y="240" fill="#4F5A69" font-size="13">C# · ASP.NET Core</text>
+          <rect x="360" y="170" width="240" height="80" rx="16" fill="#FDF0E4" stroke="#F07A1A" stroke-width="2"/>
+          <text x="380" y="198" fill="#C9580C" font-size="12" font-weight="700" letter-spacing="1.5">CINAR DENIZ TUNC</text>
+          <text x="380" y="222" fill="#151A22" font-size="19" font-weight="700">Lokales Backend</text>
+          <text x="380" y="240" fill="#4F5A69" font-size="13">Python · FastAPI</text>
+          <!-- Unten -->
+          <rect x="30" y="318" width="160" height="80" rx="16" fill="#fff" stroke="#1F73C9" stroke-width="2" stroke-dasharray="6 4"/>
+          <text x="48" y="346" fill="#1F73C9" font-size="12" font-weight="700" letter-spacing="1.5">CLOUD</text>
+          <text x="48" y="370" fill="#151A22" font-size="18" font-weight="700">Gemini</text>
+          <text x="48" y="388" fill="#4F5A69" font-size="12">Frontier-Modell</text>
+          <rect x="220" y="318" width="200" height="80" rx="16" fill="#13294B"/>
+          <text x="238" y="346" fill="#F6C343" font-size="12" font-weight="700" letter-spacing="1.5">DENYS SKRYNNIK</text>
+          <text x="238" y="370" fill="#fff" font-size="18" font-weight="700">MCP-Server</text>
+          <text x="238" y="388" fill="#C9D6E8" font-size="12">SEW-Unterlagen, 1.–3. Jg.</text>
+          <rect x="450" y="318" width="160" height="80" rx="16" fill="#fff" stroke="#F07A1A" stroke-width="2" stroke-dasharray="6 4"/>
+          <text x="468" y="346" fill="#C9580C" font-size="12" font-weight="700" letter-spacing="1.5">SCHULE</text>
+          <text x="468" y="370" fill="#151A22" font-size="18" font-weight="700">Lokales Modell</text>
+          <text x="468" y="388" fill="#4F5A69" font-size="12">frei verfügbar</text>
+          <!-- Hinweis -->
+          <text x="320" y="446" text-anchor="middle" fill="#4F5A69" font-size="14">Beide Backends: gleiche Schnittstelle, gleiche Unterlagen,</text>
+          <text x="320" y="468" text-anchor="middle" fill="#4F5A69" font-size="14">gleicher System-Prompt → fairer Vergleich</text>
+        </svg>
+      </div>
+      <ol class="liste">
+        <li><b>Frage stellen</b><span>In der App tippen oder sprechen. Die App schickt die Frage samt bisherigem Gespräch an ein Backend.</span></li>
+        <li><b>Unterlagen suchen</b><span>Das Backend fragt den MCP-Server nach passenden Abschnitten aus den SEW-Unterlagen.</span></li>
+        <li><b>Antwort schreiben</b><span>Das Sprachmodell erklärt auf Basis dieser Abschnitte – kurz, auf Deutsch, ohne fertige Lösungen zu verraten.</span></li>
+        <li><b>Anzeigen und vorlesen</b><span>Die Antwort erscheint Wort für Wort. Vorgelesen wird nur der Text, Code wird nur angezeigt.</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Vergleich ============ -->
+<section class="block vergleich" id="vergleich">
+  <div class="wrap">
+    <div class="kopf">
+      <div class="eyebrow">Die Forschungsfrage</div>
+      <h2>Lokal oder Cloud?</h2>
+      <p>Ein quantitativer und qualitativer Vergleich zwischen frei verfügbaren, lokal betriebenen Sprachmodellen und Frontier-Modellen aus der Cloud.</p>
+    </div>
+    <div class="seiten">
+      <div class="karte"><span class="ico" style="background:var(--blue)"><svg width="34" height="34" style="color:#fff"><use href="#i-wolke"/></svg></span><div><b>Frontier-Modell aus der Cloud</b><span>Gemini von Google – gehostet in fremden Rechenzentren</span></div></div>
+      <div class="karte"><span class="ico" style="background:var(--orange)"><svg width="30" height="30" style="color:#fff"><use href="#i-server"/></svg></span><div><b>Freies Modell, lokal betrieben</b><span>qwen3 auf eigener Hardware – die Daten bleiben im Haus</span></div></div>
+    </div>
+    <div class="kriterien">
+      <div class="kriterium"><span class="art">quantitativ</span><b>Antwortzeit</b><p>Wie schnell kommt das erste Wort? Wichtig, damit die Sprachausgabe flüssig startet.</p></div>
+      <div class="kriterium"><span class="art">qualitativ</span><b>Qualität</b><p>Wie gut und richtig erklärt das Modell? Bewertet mit denselben Testfragen.</p></div>
+      <div class="kriterium"><span class="art">quantitativ</span><b>Kosten</b><p>Bezahlung pro Anfrage in der Cloud gegen Hardware und Strom vor Ort.</p></div>
+      <div class="kriterium"><span class="art">qualitativ</span><b>Datenschutz</b><p>Verlassen die Fragen der Schüler die Schule – oder nicht?</p></div>
+    </div>
+    <p class="fair"><b>Damit der Vergleich fair ist,</b> bekommen beide Modelle denselben System-Prompt, dieselben Unterlagen aus dem MCP-Server und dieselbe Nachbearbeitung der Antworten.</p>
+  </div>
+</section>
+
+<!-- ============ Team ============ -->
+<section class="block" id="team">
+  <div class="wrap">
+    <div class="kopf">
+      <div class="eyebrow">Das Team</div>
+      <h2>Drei Teile, ein Tutor</h2>
+    </div>
+    <div class="team">
+      <div class="person"><div class="initialen">DS</div><b>Denys Skrynnik</b><span class="rolle">Cloud-Backend &amp; MCP-Server</span><p>Anbindung an Gemini in C#, die Wissensbasis mit den Unterrichtsunterlagen und die Aufbereitung der Lernmaterialien.</p></div>
+      <div class="person"><div class="initialen">CT</div><b>Cinar Deniz Tunc</b><span class="rolle">Lokales Backend &amp; Vergleich</span><p>Betrieb des freien Sprachmodells auf eigener Hardware in Python und der wissenschaftliche Vergleich lokal gegen Cloud.</p></div>
+      <div class="person"><div class="initialen">DB</div><b>Davud Bozkurt</b><span class="rolle">App &amp; Sprachausgabe</span><p>Die Progressive Web App mit Chat und Mikrofon sowie die Sprachausgabe in der Stimme der Lehrkraft.</p></div>
+    </div>
+    <p class="betreuer">Betreuer: DI Dr. Clemens Kerer · Klasse 5AHITN · Projekt 16IT26-01</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>AI Teacher · Diplomarbeit 2026/27 · HTL Wien West</span>
+    <span id="fuss-modell"></span>
+  </div>
+</footer>
+
+
+<script>
+// ============================================================
+//  Einstellungen
+// ============================================================
+const MAX_VERLAUF = 10;          // laut API-Absprache: hoechstens 10 Nachrichten mitschicken
+const BEISPIELE = [
+  "Was ist eine for-Schleife?",
+  "Erklär mir Vererbung",
+  "Wozu braucht man einen Konstruktor?",
+  "Was ist der Unterschied zwischen while und do-while?",
+  "Was ist ein Interface?",
+];
+
+// Kleiner Helfer: localStorage kann in manchen Browsern fehlen oder werfen.
+function speichere(schluessel, wert) { try { localStorage.setItem(schluessel, wert); } catch (e) {} }
+function lade(schluessel) { try { return localStorage.getItem(schluessel); } catch (e) { return null; } }
+
+const el = (id) => document.getElementById(id);
+const verlaufBereich = el("verlauf");
+const eingabe = el("frage");
+const sendenKnopf = el("senden");
+
+let gespraech = [];        // [{ role: "user" | "assistant", content: "..." }]
+let laeuft = false;        // gerade eine Antwort in Arbeit?
+let liveModus = false;     // true = echtes Backend erreichbar, false = Notfall-Antworten
+let modellName = "";
+
+// Liegt die Seite im Internet (GitHub Pages bzw. eigene Domain), gibt es
+// kein Backend - dann gleich die Online-Vorschau, ohne Verbindungsversuch.
+const VORSCHAU = /(^|\.)github\.io$/.test(location.hostname) || /(^|\.)aiteacher\.at$/.test(location.hostname);
+
+
+// ============================================================
+//  Verbindung pruefen: /health
+// ============================================================
+async function pruefeVerbindung() {
+  const status = el("status");
+  if (VORSCHAU) {
+    liveModus = false;
+    status.className = "status offline";
+    el("status-text").textContent = "Online-Vorschau";
+    el("modell-name").textContent = "Online-Vorschau mit vorbereiteten Antworten";
+    el("vorschau-hinweis").hidden = false;
+    el("demo-eyebrow").textContent = "Demo";
+    return;
+  }
+  try {
+    const steuerung = new AbortController();
+    const zeit = setTimeout(() => steuerung.abort(), 3000);
+    const antwort = await fetch("/health", { signal: steuerung.signal, cache: "no-store" });
+    clearTimeout(zeit);
+    if (!antwort.ok) throw new Error();
+    const info = await antwort.json();
+    liveModus = true;
+    modellName = info.model;
+    status.className = "status live";
+    el("status-text").textContent = "Live · " + info.model;
+    el("modell-name").textContent = "Live mit " + info.model;
+    el("fuss-modell").textContent = "Sprachmodell: " + info.model + " (" + info.backend + ")";
+  } catch (e) {
+    liveModus = false;
+    status.className = "status offline";
+    el("status-text").textContent = "Offline-Demo";
+    el("modell-name").textContent = "Offline-Demo mit vorbereiteten Antworten";
+  }
+}
+
+
+// ============================================================
+//  "Was gerade passiert" - die vier Schritte rechts
+// ============================================================
+function schritt(nr, zustand, text) {
+  const li = document.querySelector('.schritt[data-s="' + nr + '"]');
+  li.className = "schritt" + (zustand ? " " + zustand : "");
+  if (text !== undefined) li.querySelector("span:last-child").textContent = text;
+}
+function schritteZuruecksetzen() {
+  for (let i = 1; i <= 4; i++) schritt(i, "", "");
+}
+const sekunden = (s) => s.toFixed(2).replace(".", ",") + " s";
+
+
+// ============================================================
+//  Vorlesen - satzweise, sobald ein Satz fertig ist
+//
+//  Platzhalter fuer Davuds Sprachausgabe in der Stimme der Lehrkraft.
+//  Vorgelesen wird nur Text, nie Code (MUSS-Ziel 7).
+// ============================================================
+let vorlesenAn = lade("ai-teacher-vorlesen") !== "aus";
+let gestoppt = false;      // fuer die laufende Antwort gestoppt? (gilt bis zur naechsten Frage)
+let sprechPuffer = "";
+let offeneSaetze = 0;
+let deutscheStimme = null;
+
+function waehleStimme() {
+  if (!("speechSynthesis" in window)) return;
+  const stimmen = speechSynthesis.getVoices();
+  deutscheStimme = stimmen.find(s => s.lang === "de-AT") || stimmen.find(s => s.lang === "de-DE")
+                || stimmen.find(s => s.lang && s.lang.startsWith("de")) || null;
+}
+if ("speechSynthesis" in window) {
+  waehleStimme();
+  speechSynthesis.onvoiceschanged = waehleStimme;
+}
+
+function sprich(satz) {
+  satz = satz.trim();
+  if (!vorlesenAn || gestoppt || !("speechSynthesis" in window) || satz === "") return;
+  const u = new SpeechSynthesisUtterance(satz);
+  u.lang = deutscheStimme ? deutscheStimme.lang : "de-DE";
+  if (deutscheStimme) u.voice = deutscheStimme;
+  u.rate = 1.03;
+  offeneSaetze++;
+  schritt(4, "aktiv", "spricht …");
+  el("stopp").hidden = false;
+  u.onend = u.onerror = () => {
+    offeneSaetze--;
+    if (offeneSaetze <= 0) {
+      el("stopp").hidden = true;
+      if (!laeuft && !gestoppt) schritt(4, "fertig", "fertig vorgelesen");
+    }
+  };
+  speechSynthesis.speak(u);
+}
+
+// Nimmt neuen Text auf und spricht alle Saetze, die schon fertig sind.
+function vorlesenText(text) {
+  sprechPuffer += text;
+  const muster = /^[\s\S]*?[.!?](\s|$)/;
+  let treffer;
+  while ((treffer = sprechPuffer.match(muster)) && treffer[0].trim().length > 1) {
+    sprich(treffer[0]);
+    sprechPuffer = sprechPuffer.substring(treffer[0].length);
+  }
+}
+function vorlesenAbschliessen() {
+  sprich(sprechPuffer);
+  sprechPuffer = "";
+  if (gestoppt) schritt(4, "uebersprungen", "gestoppt");
+  else if (offeneSaetze <= 0) schritt(4, vorlesenAn ? "fertig" : "uebersprungen", vorlesenAn ? "fertig" : "Vorlesen ist aus");
+}
+function vorlesenStoppen() {
+  sprechPuffer = "";
+  offeneSaetze = 0;
+  el("stopp").hidden = true;
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+}
+
+// Stopp-Knopf und Esc: Vorlesen fuer DIESE Antwort beenden. Der Text
+// laeuft weiter auf dem Bildschirm, nur die Stimme hoert auf.
+function vorlesenAbbrechen() {
+  gestoppt = true;
+  vorlesenStoppen();
+  schritt(4, "uebersprungen", "gestoppt");
+}
+el("stopp").addEventListener("click", vorlesenAbbrechen);
+
+// Sicherheitsnetz: Manche Browser melden das Ende eines Satzes nicht
+// zuverlaessig. Spricht der Browser nichts mehr, Knopf ausblenden.
+setInterval(() => {
+  if (el("stopp").hidden || !("speechSynthesis" in window)) return;
+  if (!speechSynthesis.speaking && !speechSynthesis.pending) {
+    offeneSaetze = 0;
+    el("stopp").hidden = true;
+    if (!laeuft && !gestoppt) schritt(4, "fertig", "fertig vorgelesen");
+  }
+}, 700);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !el("stopp").hidden) vorlesenAbbrechen();
+});
+
+el("vorlesen").setAttribute("aria-checked", String(vorlesenAn));
+el("vorlesen").addEventListener("click", () => {
+  vorlesenAn = !vorlesenAn;
+  el("vorlesen").setAttribute("aria-checked", String(vorlesenAn));
+  speichere("ai-teacher-vorlesen", vorlesenAn ? "an" : "aus");
+  if (!vorlesenAn) vorlesenStoppen();
+});
+
+
+// ============================================================
+//  Nachrichten anzeigen
+// ============================================================
+function leerAusblenden() {
+  const leer = el("leer");
+  if (leer) leer.remove();
+}
+
+function zeigeFrage(text) {
+  leerAusblenden();
+  const div = document.createElement("div");
+  div.className = "nachricht user";
+  div.textContent = text;
+  verlaufBereich.appendChild(div);
+  div.scrollIntoView({ block: "end", behavior: "smooth" });
+}
+
+// Eine Antwort-Blase, in die Stueck fuer Stueck geschrieben wird.
+function neueAntwort() {
+  const blase = document.createElement("div");
+  blase.className = "nachricht ki";
+  blase.innerHTML = '<span class="tippt"><i></i><i></i><i></i></span>';
+  verlaufBereich.appendChild(blase);
+  blase.scrollIntoView({ block: "end", behavior: "smooth" });
+
+  let abschnitt = null, abschnittIstCode = false, leer = true;
+
+  return {
+    blase,
+    // Text oder Code anhaengen. textContent statt innerHTML: HTML aus der
+    // Antwort wird nur angezeigt, nie ausgefuehrt.
+    anhaengen(text, istCode) {
+      if (leer) { blase.textContent = ""; leer = false; }
+      if (abschnitt === null || istCode !== abschnittIstCode) {
+        // Nach einem Codeblock den ersten Zeilenumbruch weglassen.
+        if (!istCode && abschnitt !== null) text = text.replace(/^\n/, "");
+        abschnitt = document.createElement(istCode ? "code" : "span");
+        if (istCode) abschnitt.className = "code-block";
+        blase.appendChild(abschnitt);
+        abschnittIstCode = istCode;
+      }
+      abschnitt.textContent += text;
+      verlaufBereich.scrollTop = verlaufBereich.scrollHeight;
+    },
+    quellen(liste) {
+      if (!liste || liste.length === 0) return;
+      const box = document.createElement("div");
+      box.className = "quellen";
+      for (const q of liste) {
+        const chip = document.createElement("span");
+        chip.className = "quelle";
+        chip.innerHTML = '<svg width="13" height="13"><use href="#i-buch"/></svg>';
+        chip.appendChild(document.createTextNode(q.title + " · " + q.klasse + ". Jg. · " + q.section));
+        box.appendChild(chip);
+      }
+      blase.appendChild(box);
+    },
+    meta(teile, sprechText) {
+      const zeile = document.createElement("div");
+      zeile.className = "meta";
+      for (const t of teile) {
+        const s = document.createElement("span");
+        if (t.klasse) s.className = t.klasse;
+        s.textContent = t.text;
+        zeile.appendChild(s);
+      }
+      if (sprechText && "speechSynthesis" in window) {
+        const knopf = document.createElement("button");
+        knopf.type = "button";
+        knopf.textContent = "▶ Nochmal vorlesen";
+        knopf.addEventListener("click", () => {
+          const warAn = vorlesenAn; vorlesenAn = true; vorlesenStoppen(); gestoppt = false;
+          vorlesenText(sprechText); sprich(sprechPuffer); sprechPuffer = ""; vorlesenAn = warAn;
+        });
+        zeile.appendChild(knopf);
+      }
+      blase.appendChild(zeile);
+      verlaufBereich.scrollTop = verlaufBereich.scrollHeight;
+    },
+    fehler(text) {
+      const p = document.createElement("div");
+      p.className = "fehler-text";
+      p.textContent = text;
+      if (leer) { blase.textContent = ""; leer = false; }
+      blase.appendChild(p);
+    },
+    istLeer() { return leer; },
+  };
+}
+
+
+// ============================================================
+//  Frage senden
+// ============================================================
+async function senden(frage) {
+  if (laeuft) return;
+  laeuft = true;
+  sendenKnopf.disabled = true;
+  vorlesenStoppen();
+  gestoppt = false;
+  schritteZuruecksetzen();
+  el("vorschlaege").innerHTML = "";
+
+  zeigeFrage(frage);
+  schritt(1, "fertig", "„" + (frage.length > 40 ? frage.substring(0, 40) + "…" : frage) + "“");
+  schritt(2, "aktiv", "suche im MCP-Server …");
+
+  const verlauf = gespraech.slice(-MAX_VERLAUF);
+  gespraech.push({ role: "user", content: frage });
+
+  const antwort = neueAntwort();
+  let ergebnis;
+
+  if (liveModus) {
+    ergebnis = await fragBackend(frage, verlauf, antwort);
+    // Backend oder Google nicht erreichbar, bevor ein Wort kam: Notfall-Antwort.
+    if (ergebnis.notfall) {
+      el("status").className = "status offline";
+      el("status-text").textContent = "Notfall-Antworten";
+      ergebnis = await notfallAntwort(frage, antwort, ergebnis.grund);
+    }
+  } else {
+    ergebnis = await notfallAntwort(frage, antwort, "Offline-Demo");
+  }
+
+  if (ergebnis.text) {
+    gespraech.push({ role: "assistant", content: ergebnis.text });
+  } else {
+    gespraech.pop();   // keine Antwort: Frage wieder aus dem Verlauf nehmen
+  }
+
+  laeuft = false;
+  sendenKnopf.disabled = eingabe.value.trim() === "";
+  vorlesenAbschliessen();
+  zeigeVorschlaege();
+  eingabe.focus();
+}
+
+// Liest ein SSE-Ereignis: "event: token\ndata: {...}" -> { name, daten }
+function leseEreignis(block) {
+  const e = { name: "message", daten: null };
+  for (const zeile of block.split("\n")) {
+    if (zeile.startsWith("event:")) e.name = zeile.substring(6).trim();
+    else if (zeile.startsWith("data:")) e.daten = JSON.parse(zeile.substring(5).trim());
+  }
+  return e;
+}
+
+// Echte Antwort ueber das Backend. Gibt { text } zurueck, oder
+// { notfall: true } wenn vor dem ersten Wort etwas schiefging.
+async function fragBackend(frage, verlauf, antwort) {
+  const start = performance.now();
+  let text = "", sprechText = "", quellen = [], fertig = false, ersteZeit = null;
+
+  try {
+    const res = await fetch("/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: frage, history: verlauf, klasse: Number(el("jahrgang").value) })
+    });
+
+    if (!res.ok) {
+      const info = await res.json().catch(() => ({}));
+      const code = info.error && info.error.code;
+      if (code === "INVALID_REQUEST") {
+        antwort.fehler(info.error.message);
+        schritt(2, "", ""); return { text: "" };
+      }
+      return { notfall: true, grund: "Sprachmodell nicht erreichbar" };
+    }
+
+    const leser = res.body.getReader();
+    const dekodierer = new TextDecoder();
+    let puffer = "";
+    let quellenGemeldet = false;
+
+    while (true) {
+      const { done, value } = await leser.read();
+      if (done) break;
+      puffer += dekodierer.decode(value, { stream: true });
+
+      let grenze;
+      while ((grenze = puffer.indexOf("\n\n")) >= 0) {
+        const e = leseEreignis(puffer.substring(0, grenze));
+        puffer = puffer.substring(grenze + 2);
+
+        if (e.name === "sources") {
+          quellen = e.daten.sources || [];
+          quellenGemeldet = true;
+          schritt(2, "fertig", quellen.length + (quellen.length === 1 ? " Abschnitt" : " Abschnitte") + " gefunden");
+          schritt(3, "aktiv", "denkt nach …");
+        }
+        else if (e.name === "token") {
+          if (ersteZeit === null) {
+            ersteZeit = (performance.now() - start) / 1000;
+            if (!quellenGemeldet) schritt(2, "uebersprungen", "nichts Passendes – allgemeines Wissen");
+            schritt(3, "aktiv", "erstes Wort nach " + sekunden(ersteZeit));
+          }
+          antwort.anhaengen(e.daten.text, e.daten.code === true);
+          text += e.daten.text;
+          if (e.daten.code !== true) {
+            sprechText += e.daten.text;
+            vorlesenText(e.daten.text);
+          }
+        }
+        else if (e.name === "done") {
+          fertig = true;
+          const d = e.daten;
+          schritt(3, "fertig", "erstes Wort " + sekunden(d.first_token_seconds) + " · fertig " + sekunden(d.duration_seconds));
+          antwort.quellen(quellen);
+          antwort.meta([
+            { text: d.model },
+            { text: "erstes Wort nach " + sekunden(d.first_token_seconds) },
+            { text: "fertig nach " + sekunden(d.duration_seconds) },
+          ], sprechText);
+        }
+        else if (e.name === "error") {
+          // Fehler BEVOR ein Wort kam: lieber die Notfall-Antwort zeigen.
+          if (text === "") return { notfall: true, grund: e.daten.message };
+          antwort.fehler(e.daten.message);
+          schritt(3, "", "abgebrochen");
+          return { text };
+        }
+      }
+    }
+
+    if (!fertig) {
+      if (text === "") return { notfall: true, grund: "Verbindung abgebrochen" };
+      antwort.fehler("Verbindung abgebrochen – Antwort unvollständig.");
+      return { text: "" };
+    }
+    return { text };
+  }
+  catch (fehler) {
+    // Backend gar nicht erreichbar (Laptop-Server aus, Netzwerkfehler).
+    if (text === "") return { notfall: true, grund: "Backend nicht erreichbar" };
+    antwort.fehler("Verbindung abgebrochen – Antwort unvollständig.");
+    return { text: "" };
+  }
+}
+
+
+// ============================================================
+//  Notfall-Modus: vorbereitete Antworten
+//
+//  Ehrlich gekennzeichnet. Wird verwendet, wenn das Backend oder Google
+//  nicht erreichbar ist. Die Antworten folgen denselben Regeln wie der
+//  System-Prompt: kurz, Code nur als Codeblock, Rueckfrage am Ende.
+// ============================================================
+const NOTFALL = [
+  { muster: /do.?while|while/i,
+    quellen: [{ title: "Schleifen", klasse: 1, section: "while-Schleife" }, { title: "Schleifen", klasse: 1, section: "do-while-Schleife" }],
+    teile: [["Beide Schleifen wiederholen Befehle, solange eine Bedingung erfüllt ist. Der Unterschied ist, wann geprüft wird. Die while-Schleife prüft vor jedem Durchlauf, sie läuft also eventuell kein einziges Mal. Die do-while-Schleife prüft erst danach und läuft deshalb immer mindestens einmal.\n"],
+            ["int zahl;\ndo\n{\n    zahl = int.Parse(Console.ReadLine());\n} while (zahl < 0);", true],
+            ["\nFällt dir ein Beispiel ein, bei dem etwas sicher mindestens einmal passieren muss?"]] },
+  { muster: /schleife|for\b|loop|wiederhol/i,
+    quellen: [{ title: "Schleifen", klasse: 1, section: "for-Schleife" }],
+    teile: [["Eine for-Schleife ist eine Zählschleife. Man verwendet sie, wenn vorher feststeht, wie oft etwas passieren soll. Im Kopf stehen drei Teile: der Startwert, die Bedingung und der Schritt nach jedem Durchlauf.\n"],
+            ["for (int i = 0; i < 3; i++)\n{\n    Console.WriteLine(i);\n}", true],
+            ["\nDiese Schleife läuft dreimal und gibt 0, 1 und 2 aus. Was müsstest du ändern, damit sie bis 10 zählt?"]] },
+  { muster: /vererb|erben|basisklasse|override/i,
+    quellen: [{ title: "Vererbung", klasse: 2, section: "Was ist Vererbung?" }],
+    teile: [["Bei der Vererbung übernimmt eine Klasse die Eigenschaften und Methoden einer anderen. Stell dir eine Klasse Tier vor: Ein Hund ist ein Tier, er kann alles, was ein Tier kann, und zusätzlich bellen. Die vorhandene Klasse heißt Basisklasse, die neue abgeleitete Klasse.\n"],
+            ["class Hund : Tier\n{\n    public void Bellen() { Console.WriteLine(\"Wuff\"); }\n}", true],
+            ["\nPasst der Satz „B ist ein A“, ist Vererbung meist sinnvoll. Welches andere Beispiel aus dem Alltag fällt dir dazu ein?"]] },
+  { muster: /konstruktor/i,
+    quellen: [{ title: "Klassen und Objekte", klasse: 2, section: "Der Konstruktor" }],
+    teile: [["Der Konstruktor ist eine besondere Methode, die genau einmal läuft, wenn ein Objekt mit new erzeugt wird. Er heißt wie die Klasse und hat keinen Rückgabetyp. Seine Aufgabe ist, dass das Objekt von Anfang an gültige Werte hat, zum Beispiel einen Namen und ein Alter. Eine Klasse kann auch mehrere Konstruktoren mit unterschiedlichen Parametern haben. Welche Werte bräuchte deiner Meinung nach ein Schüler-Objekt gleich beim Erzeugen?"]] },
+  { muster: /interface|schnittstelle/i,
+    quellen: [{ title: "Interfaces", klasse: 3, section: "Was ist ein Interface?" }],
+    teile: [["Ein Interface ist wie ein Vertrag. Es legt fest, welche Methoden eine Klasse haben muss, aber nicht, wie sie funktionieren. Eine Klasse kann von nur einer Klasse erben, aber beliebig viele Interfaces erfüllen. So kann Code mit ganz verschiedenen Klassen arbeiten, solange sie dasselbe Interface haben.\n"],
+            ["interface IFahrzeug\n{\n    void Fahren();\n}", true],
+            ["\nWelche Klassen könnten bei dir das Interface IFahrzeug erfüllen?"]] },
+  { muster: /variable|datentyp|\bint\b|double|string/i,
+    quellen: [{ title: "Variablen und Datentypen", klasse: 1, section: "Was ist eine Variable?" }],
+    teile: [["Eine Variable ist ein benannter Speicherplatz für einen Wert. Du gibst ihr einen Datentyp und einen Namen, danach kannst du den Wert lesen und ändern. Der Datentyp legt fest, was hineinpasst: int für ganze Zahlen, double für Kommazahlen, string für Text.\n"],
+            ["int alter = 16;\nalter = alter + 1;", true],
+            ["\nWelchen Datentyp würdest du für einen Notendurchschnitt nehmen?"]] },
+  { muster: /\bif\b|else|verzweig|bedingung|switch/i,
+    quellen: [{ title: "Verzweigungen", klasse: 1, section: "if und else" }],
+    teile: [["Mit if führt das Programm einen Block nur aus, wenn eine Bedingung wahr ist, sonst den else-Block. Die Bedingung ist meist ein Vergleich, zum Beispiel ob eine Note kleiner oder gleich vier ist. Achte darauf, zum Vergleichen zwei Gleichheitszeichen zu verwenden, ein einzelnes ist eine Zuweisung. Wie würdest du prüfen, ob eine Zahl gerade ist?"]] },
+];
+const NOTFALL_STANDARD = {
+  quellen: [],
+  teile: [[VORSCHAU
+    ? "In der Online-Vorschau kann ich nur vorbereitete Fragen beantworten – zum Beispiel zu Schleifen, Vererbung, Konstruktoren, Interfaces, Variablen oder Verzweigungen. Probier eine der Beispielfragen unten! Die echte KI zeigen wir live am Projektstand."
+    : "Gerade bin ich offline und kann nur ein paar vorbereitete Fragen beantworten – zum Beispiel zu Schleifen, Vererbung, Konstruktoren, Interfaces, Variablen oder Verzweigungen. Probier eine der Beispielfragen unten!"]]
+};
+
+const warte = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function notfallAntwort(frage, antwort, grund) {
+  const eintrag = NOTFALL.find(n => n.muster.test(frage)) || NOTFALL_STANDARD;
+  const start = performance.now();
+
+  await warte(350);
+  if (eintrag.quellen.length > 0) {
+    schritt(2, "fertig", eintrag.quellen.length + (eintrag.quellen.length === 1 ? " Abschnitt" : " Abschnitte") + " (vorbereitet)");
+  } else {
+    schritt(2, "uebersprungen", VORSCHAU ? "Vorschau – keine Suche" : "offline – keine Suche");
+  }
+  schritt(3, "aktiv", "vorbereitete Antwort");
+  await warte(250);
+
+  let text = "", sprechText = "";
+  for (const [teil, istCode] of eintrag.teile) {
+    if (istCode) {
+      antwort.anhaengen(teil, true);
+      text += teil;
+      await warte(120);
+      continue;
+    }
+    // Text wortweise "streamen", damit es aussieht wie echt.
+    const woerter = teil.split(/(?<=\s)/);
+    for (const w of woerter) {
+      antwort.anhaengen(w, false);
+      text += w; sprechText += w;
+      vorlesenText(w);
+      await warte(32);
+    }
+  }
+
+  const dauer = (performance.now() - start) / 1000;
+  schritt(3, "fertig", "vorbereitete Antwort");
+  antwort.quellen(eintrag.quellen);
+  antwort.meta(VORSCHAU
+    ? [{ text: "Vorbereitete Antwort (Online-Vorschau)", klasse: "offline-hinweis" }]
+    : [{ text: "Offline-Demo: vorbereitete Antwort", klasse: "offline-hinweis" },
+       { text: grund === "Offline-Demo" ? "kein Backend erreichbar" : grund }],
+    sprechText);
+  return { text };
+}
+
+
+// ============================================================
+//  Spracheingabe (Mikrofon)
+//
+//  Verwendet die Spracherkennung des Browsers (Chrome/Edge). Ist sie
+//  nicht vorhanden, bleibt der Mikrofon-Knopf ausgeblendet.
+// ============================================================
+const Erkennung = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (Erkennung) {
+  const mikro = el("mikro");
+  mikro.hidden = false;
+  let erkennung = null;
+
+  mikro.addEventListener("click", () => {
+    if (erkennung) { erkennung.stop(); return; }
+    vorlesenStoppen();
+    erkennung = new Erkennung();
+    erkennung.lang = "de-AT";
+    erkennung.interimResults = true;
+    erkennung.continuous = false;
+    let endgueltig = "";
+
+    erkennung.onresult = (e) => {
+      let zwischen = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) endgueltig += e.results[i][0].transcript;
+        else zwischen += e.results[i][0].transcript;
+      }
+      eingabe.value = endgueltig + zwischen;
+      sendenKnopf.disabled = laeuft || eingabe.value.trim() === "";
+    };
+    erkennung.onerror = (e) => {
+      if (e.error === "network") eingabe.placeholder = "Spracherkennung braucht Internet – bitte tippen";
+      else if (e.error === "not-allowed") eingabe.placeholder = "Mikrofon nicht erlaubt – bitte tippen";
+    };
+    erkennung.onend = () => {
+      mikro.classList.remove("hoert");
+      erkennung = null;
+      const frage = eingabe.value.trim();
+      if (frage !== "" && !laeuft) { eingabe.value = ""; senden(frage); }
+    };
+    mikro.classList.add("hoert");
+    erkennung.start();
+  });
+}
+
+
+// ============================================================
+//  Bedienung
+// ============================================================
+function zeigeVorschlaege() {
+  const box = el("vorschlaege");
+  box.innerHTML = "";
+  // Nach dem Start alle Beispiele, spaeter nur noch zwei, die noch nicht gefragt wurden.
+  const gefragt = gespraech.filter(n => n.role === "user").map(n => n.content);
+  const offen = BEISPIELE.filter(b => !gefragt.includes(b));
+  const auswahl = gespraech.length === 0 ? offen : offen.slice(0, 2);
+  for (const b of auswahl) {
+    const k = document.createElement("button");
+    k.type = "button"; k.className = "vorschlag"; k.textContent = b;
+    k.addEventListener("click", () => senden(b));
+    box.appendChild(k);
+  }
+}
+
+el("formular").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const frage = eingabe.value.trim();
+  if (frage === "" || laeuft) return;
+  eingabe.value = "";
+  eingabe.style.height = "";
+  sendenKnopf.disabled = true;
+  senden(frage);
+});
+
+eingabe.addEventListener("input", () => {
+  sendenKnopf.disabled = laeuft || eingabe.value.trim() === "";
+  eingabe.style.height = "";
+  eingabe.style.height = Math.min(eingabe.scrollHeight, 140) + "px";
+});
+
+eingabe.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    el("formular").requestSubmit();
+  }
+});
+
+el("neu").addEventListener("click", () => {
+  if (laeuft) return;
+  vorlesenStoppen();
+  gespraech = [];
+  verlaufBereich.innerHTML = '<div class="leer" id="leer"><h3>Was willst du wissen?</h3><p>Zum Beispiel, wie eine Schleife funktioniert oder was Vererbung ist. Probier auch eine Rückfrage – der Tutor merkt sich das Gespräch.</p></div>';
+  schritteZuruecksetzen();
+  zeigeVorschlaege();
+  eingabe.focus();
+});
+
+// Start
+zeigeVorschlaege();
+pruefeVerbindung();
+if (!VORSCHAU) setInterval(() => { if (!laeuft) pruefeVerbindung(); }, 30000);   // WLAN wieder da? dann wieder live
+</script>
+</body>
+</html>
