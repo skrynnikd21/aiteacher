@@ -328,10 +328,10 @@
       </div>
     </div>
     <div class="gespraech" aria-hidden="true">
-      <div class="blase-demo frage">Was ist eigentlich Vererbung?</div>
+      <div class="blase-demo frage">Wozu brauche ich eine Schleife?</div>
       <div class="blase-demo antwort">
         <div class="welle"><i style="height:9px"></i><i style="height:17px;animation-delay:.1s"></i><i style="height:24px;animation-delay:.2s"></i><i style="height:14px;animation-delay:.3s"></i><i style="height:20px;animation-delay:.4s"></i><i style="height:11px;animation-delay:.5s"></i><i style="height:22px;animation-delay:.6s"></i><i style="height:13px;animation-delay:.7s"></i><small>AI TEACHER</small></div>
-        Stell dir eine Klasse „Tier“ vor. Ein Hund erbt alles, was ein Tier kann – und kann zusätzlich bellen.
+        Stell dir vor, der Lieferwagen soll zehnmal nach vorne fahren. Statt zehnmal Forward() schreibst du eine for-Schleife.
       </div>
     </div>
   </div>
@@ -352,7 +352,7 @@
       <div class="eyebrow" id="demo-eyebrow">Live-Demo</div>
       <h2>Frag den AI Teacher</h2>
       <p>Stell eine Frage zu Softwareentwicklung – tippen oder auf das Mikrofon tippen und sprechen. Rechts siehst du, was im Hintergrund gerade passiert.</p>
-      <p class="vorschau-hinweis" id="vorschau-hinweis" hidden><b>Online-Vorschau:</b> Hier antwortet der AI Teacher mit vorbereiteten Beispielen zu Schleifen, Vererbung, Konstruktoren, Interfaces, Variablen und Verzweigungen. Die echte KI mit Gemini und den Unterrichtsunterlagen zeigen wir live am Projektstand.</p>
+      <p class="vorschau-hinweis" id="vorschau-hinweis" hidden><b>Online-Vorschau:</b> Hier antwortet der AI Teacher mit vorbereiteten Beispielen zu Schleifen, Unterprogrammen, Verzweigungen, Datentypen, Arrays und Listen. Die echte KI mit Gemini und den Unterrichtsunterlagen zeigen wir live am Projektstand.</p>
     </div>
 
     <div class="demo-raster" id="chat">
@@ -369,7 +369,7 @@
         <div class="verlauf" id="verlauf" aria-live="polite">
           <div class="leer" id="leer">
             <h3>Was willst du wissen?</h3>
-            <p>Zum Beispiel, wie eine Schleife funktioniert oder was Vererbung ist. Probier auch eine Rückfrage – der Tutor merkt sich das Gespräch.</p>
+            <p>Zum Beispiel, wie eine Schleife funktioniert oder wozu man Unterprogramme braucht. Probier auch eine Rückfrage – der Tutor merkt sich das Gespräch.</p>
           </div>
         </div>
 
@@ -536,10 +536,11 @@
 const MAX_VERLAUF = 10;          // laut API-Absprache: hoechstens 10 Nachrichten mitschicken
 const BEISPIELE = [
   "Was ist eine for-Schleife?",
-  "Erklär mir Vererbung",
-  "Wozu braucht man einen Konstruktor?",
   "Was ist der Unterschied zwischen while und do-while?",
-  "Was ist ein Interface?",
+  "Wozu braucht man Unterprogramme?",
+  "Was ist der Unterschied zwischen Array und Liste?",
+  "Wie funktioniert switch?",
+  "Ich komme bei Aufgabe 4-3 nicht weiter",
 ];
 
 // Kleiner Helfer: localStorage kann in manchen Browsern fehlen oder werfen.
@@ -559,6 +560,13 @@ let modellName = "";
 // Liegt die Seite im Internet (GitHub Pages bzw. eigene Domain), gibt es
 // kein Backend - dann gleich die Online-Vorschau, ohne Verbindungsversuch.
 const VORSCHAU = /(^|\.)github\.io$/.test(location.hostname) || /(^|\.)aiteacher\.at$/.test(location.hostname);
+
+// Am Stand: Der Browser merkt sich die Seite (sw.js). Laeuft das Backend nicht und
+// jemand drueckt F5, kommt trotzdem die Seite - im Offline-Modus. Nicht in der
+// Online-Vorschau, dort gibt es kein Backend und keine sw.js.
+if (!VORSCHAU && "serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
 
 
 // ============================================================
@@ -958,44 +966,51 @@ async function fragBackend(frage, verlauf, antwort) {
 //  nicht erreichbar ist. Die Antworten folgen denselben Regeln wie der
 //  System-Prompt: kurz, Code nur als Codeblock, Rueckfrage am Ende.
 // ============================================================
+// Die Quellen sind echte Abschnitte aus den SEW-Unterlagen (mcp-server/unterlagen).
+const CS = (nr, titel) => "Cheat Sheet " + nr + ": " + titel;
 const NOTFALL = [
+  { muster: /4[-._ ]3|über den berg/i,
+    quellen: [{ title: "CargoTrucker 4-3: Mit Schleifen über den Berg", klasse: 1, section: "Angabe" }],
+    teile: [["Die Lösung verrate ich dir nicht, aber einen Weg dorthin. Schau dir zuerst an, welche Bewegungen sich wiederholen: zweimal hinauf und ein Feld vor, dann zweimal hinunter und ein Feld vor. Jede dieser Wiederholungen wird eine eigene for-Schleife. Die Rechtsdrehung, also dreimal Left(), lagerst du am besten in ein Unterprogramm aus. Wie oft muss die erste Schleife laufen?"]] },
+  { muster: /aufgabe|cargo.?trucker|übung/i,
+    quellen: [],
+    teile: [["Bei Aufgaben gebe ich dir keine fertige Lösung, sondern helfe dir, selbst draufzukommen. Sag mir die Nummer der Aufgabe, zum Beispiel 4-3, und was du schon probiert hast. Dann schauen wir gemeinsam, wo es hakt."]] },
   { muster: /do.?while|while/i,
-    quellen: [{ title: "Schleifen", klasse: 1, section: "while-Schleife" }, { title: "Schleifen", klasse: 1, section: "do-while-Schleife" }],
-    teile: [["Beide Schleifen wiederholen Befehle, solange eine Bedingung erfüllt ist. Der Unterschied ist, wann geprüft wird. Die while-Schleife prüft vor jedem Durchlauf, sie läuft also eventuell kein einziges Mal. Die do-while-Schleife prüft erst danach und läuft deshalb immer mindestens einmal.\n"],
-            ["int zahl;\ndo\n{\n    zahl = int.Parse(Console.ReadLine());\n} while (zahl < 0);", true],
-            ["\nFällt dir ein Beispiel ein, bei dem etwas sicher mindestens einmal passieren muss?"]] },
-  { muster: /schleife|for\b|loop|wiederhol/i,
-    quellen: [{ title: "Schleifen", klasse: 1, section: "for-Schleife" }],
-    teile: [["Eine for-Schleife ist eine Zählschleife. Man verwendet sie, wenn vorher feststeht, wie oft etwas passieren soll. Im Kopf stehen drei Teile: der Startwert, die Bedingung und der Schritt nach jedem Durchlauf.\n"],
-            ["for (int i = 0; i < 3; i++)\n{\n    Console.WriteLine(i);\n}", true],
-            ["\nDiese Schleife läuft dreimal und gibt 0, 1 und 2 aus. Was müsstest du ändern, damit sie bis 10 zählt?"]] },
-  { muster: /vererb|erben|basisklasse|override/i,
-    quellen: [{ title: "Vererbung", klasse: 2, section: "Was ist Vererbung?" }],
-    teile: [["Bei der Vererbung übernimmt eine Klasse die Eigenschaften und Methoden einer anderen. Stell dir eine Klasse Tier vor: Ein Hund ist ein Tier, er kann alles, was ein Tier kann, und zusätzlich bellen. Die vorhandene Klasse heißt Basisklasse, die neue abgeleitete Klasse.\n"],
-            ["class Hund : Tier\n{\n    public void Bellen() { Console.WriteLine(\"Wuff\"); }\n}", true],
-            ["\nPasst der Satz „B ist ein A“, ist Vererbung meist sinnvoll. Welches andere Beispiel aus dem Alltag fällt dir dazu ein?"]] },
-  { muster: /konstruktor/i,
-    quellen: [{ title: "Klassen und Objekte", klasse: 2, section: "Der Konstruktor" }],
-    teile: [["Der Konstruktor ist eine besondere Methode, die genau einmal läuft, wenn ein Objekt mit new erzeugt wird. Er heißt wie die Klasse und hat keinen Rückgabetyp. Seine Aufgabe ist, dass das Objekt von Anfang an gültige Werte hat, zum Beispiel einen Namen und ein Alter. Eine Klasse kann auch mehrere Konstruktoren mit unterschiedlichen Parametern haben. Welche Werte bräuchte deiner Meinung nach ein Schüler-Objekt gleich beim Erzeugen?"]] },
-  { muster: /interface|schnittstelle/i,
-    quellen: [{ title: "Interfaces", klasse: 3, section: "Was ist ein Interface?" }],
-    teile: [["Ein Interface ist wie ein Vertrag. Es legt fest, welche Methoden eine Klasse haben muss, aber nicht, wie sie funktionieren. Eine Klasse kann von nur einer Klasse erben, aber beliebig viele Interfaces erfüllen. So kann Code mit ganz verschiedenen Klassen arbeiten, solange sie dasselbe Interface haben.\n"],
-            ["interface IFahrzeug\n{\n    void Fahren();\n}", true],
-            ["\nWelche Klassen könnten bei dir das Interface IFahrzeug erfüllen?"]] },
-  { muster: /variable|datentyp|\bint\b|double|string/i,
-    quellen: [{ title: "Variablen und Datentypen", klasse: 1, section: "Was ist eine Variable?" }],
-    teile: [["Eine Variable ist ein benannter Speicherplatz für einen Wert. Du gibst ihr einen Datentyp und einen Namen, danach kannst du den Wert lesen und ändern. Der Datentyp legt fest, was hineinpasst: int für ganze Zahlen, double für Kommazahlen, string für Text.\n"],
-            ["int alter = 16;\nalter = alter + 1;", true],
-            ["\nWelchen Datentyp würdest du für einen Notendurchschnitt nehmen?"]] },
+    quellen: [{ title: CS(8, "while-Schleife"), klasse: 1, section: "Sprunganweisungen (Teil 2)" }],
+    teile: [["Beide Schleifen wiederholen Anweisungen, solange eine Bedingung erfüllt ist. Der Unterschied ist, wann geprüft wird. Die while-Schleife prüft vor jedem Durchlauf, sie läuft also eventuell kein einziges Mal. Die do-while-Schleife prüft erst am Ende und läuft deshalb immer mindestens einmal.\n"],
+            ["int note;\ndo\n{\n    note = ReadInt(\"Note eingeben (1-5):\");\n} while (note < 1 || note > 5);", true],
+            ["\nHier muss der Benutzer sicher einmal etwas eingeben, deshalb passt do-while. Fällt dir noch ein Beispiel ein, bei dem etwas mindestens einmal passieren muss?"]] },
+  { muster: /schleife|\bfor\b|loop|wiederhol/i,
+    quellen: [{ title: CS(4, "for-Schleife"), klasse: 1, section: "Einleitung" }],
+    teile: [["Die for-Schleife ist eine Zählschleife. Du verwendest sie, wenn du vorher weißt, wie oft etwas wiederholt werden soll. Im Kopf stehen drei Teile: die Initialisierung der Zählvariable, die Bedingung und die Aktualisierung nach jedem Durchlauf.\n"],
+            ["for (int i = 0; i < 5; i++)\n{\n    Forward();\n}", true],
+            ["\nDamit fährt der Lieferwagen fünf Felder nach vorne. Was müsstest du ändern, damit er nach jedem Feld eine Kiste ablegt?"]] },
+  { muster: /unterprogramm|methode|parameter|void|prozedur/i,
+    quellen: [{ title: CS(2, "Unterprogramme"), klasse: 1, section: "Unterprogramme definieren" }],
+    teile: [["Ein Unterprogramm fasst mehrere Anweisungen unter einem Namen zusammen. Statt denselben Code mehrmals zu schreiben, rufst du einfach den Namen auf. Das macht das Programm kürzer und leichter zu lesen. Beim Cargo Trucker ist das klassische Beispiel die Rechtsdrehung.\n"],
+            ["void Right()\n{\n    Left();\n    Left();\n    Left();\n}", true],
+            ["\nDanach schreibst du überall nur noch Right(). Welche Befehlsfolge wiederholt sich in deinem letzten Programm?"]] },
+  { muster: /liste|list<|array/i,
+    quellen: [{ title: CS(12, "Arrays und Tupel"), klasse: 1, section: "Arrays" }, { title: CS(13, "Listen"), klasse: 1, section: "Einleitung" }],
+    teile: [["Beide speichern mehrere Werte vom selben Datentyp. Ein Array hat eine feste Länge, die beim Anlegen festgelegt wird. Eine Liste kann wachsen und schrumpfen, mit Add fügst du hinten ein Element an, mit Remove löschst du eines.\n"],
+            ["int[] noten = new int[3];\nList<int> zahlen = new List<int>();\nzahlen.Add(5);", true],
+            ["\nWenn du noch nicht weißt, wie viele Werte der Benutzer eingibt: Was würdest du dann nehmen?"]] },
   { muster: /\bif\b|else|verzweig|bedingung|switch/i,
-    quellen: [{ title: "Verzweigungen", klasse: 1, section: "if und else" }],
-    teile: [["Mit if führt das Programm einen Block nur aus, wenn eine Bedingung wahr ist, sonst den else-Block. Die Bedingung ist meist ein Vergleich, zum Beispiel ob eine Note kleiner oder gleich vier ist. Achte darauf, zum Vergleichen zwei Gleichheitszeichen zu verwenden, ein einzelnes ist eine Zuweisung. Wie würdest du prüfen, ob eine Zahl gerade ist?"]] },
+    quellen: [{ title: CS(7, "Verzweigungen und Bedingungen"), klasse: 1, section: "Mehrere Bedingungen mit switch" }],
+    teile: [["Mit if führt das Programm einen Block nur aus, wenn eine Bedingung wahr ist, sonst den else-Block. Wenn du eine Variable mit vielen einzelnen Werten vergleichst, ist switch übersichtlicher. Jeder Fall beginnt mit case und endet mit break.\n"],
+            ["switch (note)\n{\n    case 1:\n        WriteLine(\"Sehr gut\");\n        break;\n    default:\n        WriteLine(\"Andere Note\");\n        break;\n}", true],
+            ["\nWas passiert hier wohl, wenn note den Wert 3 hat?"]] },
+  { muster: /variable|datentyp|\bint\b|double|string|bool/i,
+    quellen: [{ title: CS(9, "Primitive Datentypen und Operatoren"), klasse: 1, section: "Primitive Datentypen in C#" }],
+    teile: [["Der Datentyp legt fest, welche Werte in eine Variable passen. int speichert ganze Zahlen, double Kommazahlen, string Text und bool nur true oder false. Achtung bei der Division: Teilst du zwei int-Werte, fällt der Rest weg.\n"],
+            ["int a = 7 / 2;       // 3\ndouble b = 7.0 / 2;  // 3.5", true],
+            ["\nWelchen Datentyp würdest du für einen Notendurchschnitt nehmen?"]] },
 ];
 const NOTFALL_STANDARD = {
   quellen: [],
   teile: [[VORSCHAU
-    ? "In der Online-Vorschau kann ich nur vorbereitete Fragen beantworten – zum Beispiel zu Schleifen, Vererbung, Konstruktoren, Interfaces, Variablen oder Verzweigungen. Probier eine der Beispielfragen unten! Die echte KI zeigen wir live am Projektstand."
-    : "Gerade bin ich offline und kann nur ein paar vorbereitete Fragen beantworten – zum Beispiel zu Schleifen, Vererbung, Konstruktoren, Interfaces, Variablen oder Verzweigungen. Probier eine der Beispielfragen unten!"]]
+    ? "In der Online-Vorschau kann ich nur vorbereitete Fragen beantworten – zum Beispiel zu Schleifen, Unterprogrammen, Verzweigungen, Datentypen, Arrays oder Listen. Probier eine der Beispielfragen unten! Die echte KI zeigen wir live am Projektstand."
+    : "Gerade bin ich offline und kann nur ein paar vorbereitete Fragen beantworten – zum Beispiel zu Schleifen, Unterprogrammen, Verzweigungen, Datentypen, Arrays oder Listen. Probier eine der Beispielfragen unten!"]]
 };
 
 const warte = (ms) => new Promise(r => setTimeout(r, ms));
@@ -1134,7 +1149,7 @@ el("neu").addEventListener("click", () => {
   if (laeuft) return;
   vorlesenStoppen();
   gespraech = [];
-  verlaufBereich.innerHTML = '<div class="leer" id="leer"><h3>Was willst du wissen?</h3><p>Zum Beispiel, wie eine Schleife funktioniert oder was Vererbung ist. Probier auch eine Rückfrage – der Tutor merkt sich das Gespräch.</p></div>';
+  verlaufBereich.innerHTML = '<div class="leer" id="leer"><h3>Was willst du wissen?</h3><p>Zum Beispiel, wie eine Schleife funktioniert oder wozu man Unterprogramme braucht. Probier auch eine Rückfrage – der Tutor merkt sich das Gespräch.</p></div>';
   schritteZuruecksetzen();
   zeigeVorschlaege();
   eingabe.focus();
